@@ -4,11 +4,11 @@ on:
   push:
     branches: 
       - master
-  schedule:
-    - cron: '0 19 * * *'
+  # schedule:
+  #   - cron: '0 19 * * *'
 
 jobs:
-  mirror_to_gitee:
+  auto-commit:
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout'
