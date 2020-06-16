@@ -1,10 +1,9 @@
 package com.kuaishou.kcode;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.util.*;
+import java.util.Arrays;
+
 
 /**
  * @author: shenke
@@ -12,13 +11,15 @@ import java.util.*;
  * @date: 2020/5/28
  */
 
+
 public class KcodeQuestion {
-    private static final int STAMP_MAX = 4500;
-    private static final int METHOD_MAX = 70;
-    private static final int TIME_MAX = 3500;
+    private static final int STAMP_MAX = 4200;
+    private static final int METHOD_MAX = 100;
+    private static final int TIME_MAX = 3200;
+    private static final int BUFFER_SIZE = 1 << 18;
+    private static final int CACHE_SIZE = 1 << 6;
 
     private int minStamp;
-    private Map<String, Integer> methodMap;
     private String[][] res;
 
 
@@ -26,7 +27,6 @@ public class KcodeQuestion {
      * init
      */
     public KcodeQuestion() {
-        methodMap = new HashMap<>();
         res = new String[STAMP_MAX][METHOD_MAX];
     }
 
@@ -45,83 +45,148 @@ public class KcodeQuestion {
      * deal with input data
      */
     public void prepare(InputStream inputStream) {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+        byte[] buffer = new byte[BUFFER_SIZE];
+        byte[] cache = new byte[CACHE_SIZE];
+        int bufferLength, cacheLength = 0;
+
+        int stamp = 0, methodIdx, elpasedTime;
+        byte currentByte = 0;
+
         int[][] array = new int[METHOD_MAX][TIME_MAX];
         int[] arraySum = new int[METHOD_MAX];
         int[] size = new int[METHOD_MAX];
         boolean[] flag = new boolean[METHOD_MAX];
 
-        String line, methodName;
-        int currentStamp = 0, methodIndex = 0, elpasedTime;
-        char currentChar = 0, ch;
-
         try {
-            if ((line = reader.readLine()) != null) {
-                currentChar = line.charAt(9);
-                currentStamp = (int) Long.parseLong(line.substring(0, 10));
-                int loc = line.lastIndexOf(',');
-                methodName = line.substring(14, loc);
-                elpasedTime = (int) Long.parseLong(line.substring(loc + 1));
-
-                minStamp = currentStamp;
-                methodMap.put(methodName, methodIndex);
-                array[methodIndex][0] = elpasedTime;
-                arraySum[methodIndex] = elpasedTime;
-                ++size[methodIndex];
-                flag[methodIndex++] = true;
-            }
-
-            while ((line = reader.readLine()) != null) {
-                ch = line.charAt(9);
-                int loc = line.lastIndexOf(',');
-                methodName = line.substring(14, loc);
-                elpasedTime = (int) Long.parseLong(line.substring(loc + 1));
-
-                int methodIdx;
-                if (methodMap.containsKey(methodName)) {
-                    methodIdx = methodMap.get(methodName);
-                } else {
-                    methodMap.put(methodName, methodIndex);
-                    methodIdx = methodIndex++;
+            //  处理第一块（主要是为了处理第一行）
+            if ((bufferLength = inputStream.read(buffer)) > 0) {
+                int end = bufferLength - 1;
+                while (buffer[end] != 10) {
+                    --end;
                 }
+                cacheLength = bufferLength - ++end;
+                System.arraycopy(buffer, end, cache, 0, cacheLength);
 
-                if (ch == currentChar) {
+                int idx = 0;
+                stamp = 0;
+                while (idx < 10) {
+                    stamp = stamp * 10 + buffer[idx++] - 48;
+                }
+                minStamp = stamp;
+                stamp = 0;
+                currentByte = buffer[9];
+
+                idx += 4;
+                while (idx < end) {
+                    methodIdx = idx;
+                    while (buffer[idx] != 44) {
+                        ++idx;
+                    }
+                    methodIdx = (idx - methodIdx - 5) * 10 + (buffer[idx - 1] - 48);
+
+                    ++idx;
+                    elpasedTime = 0;
+                    while (buffer[idx] != 10) {
+                        elpasedTime = elpasedTime * 10 + buffer[idx++] - 48;
+                    }
+
                     array[methodIdx][size[methodIdx]++] = elpasedTime;
                     arraySum[methodIdx] += elpasedTime;
                     flag[methodIdx] = true;
-                } else {
-                    for (int i = 0; i < METHOD_MAX; ++i) {
-                        if (flag[i]) {
-                            int qps = size[i], sum = arraySum[i];
-                            int[] arr = Arrays.copyOf(array[i], qps);
-                            Arrays.sort(arr);
-
-                            int avg = sum / qps;
-                            if (avg * qps != sum)
-                                ++avg;
-
-                            StringBuilder builder = new StringBuilder(20);
-                            builder.append(qps).append(",").append(arr[getIndex(qps, 0.99)]).append(",").append(arr[getIndex(qps, 0.5)]).append(",").append(avg).append(",").append(arr[qps - 1]);
-                            res[currentStamp - minStamp][i] = builder.toString();
-                            arraySum[i] = 0;
-                            size[i] = 0;
-                            flag[i] = false;
-                        }
-                    }
-
-                    currentChar = ch;
-                    ++currentStamp;
-                    array[methodIdx][0] = elpasedTime;
-                    arraySum[methodIdx] = elpasedTime;
-                    ++size[methodIdx];
-                    flag[methodIdx] = true;
+                    idx += 15;
                 }
             }
 
-        } catch (IOException e) {
+            //  处理剩余块
+            while ((bufferLength = inputStream.read(buffer)) > 0) {
+                if (bufferLength < BUFFER_SIZE) {
+                    buffer = Arrays.copyOf(buffer, bufferLength);
+                }
+
+                int idx = 0;
+                while (buffer[idx] != 10) {
+                    ++idx;
+                }
+                System.arraycopy(buffer, 0, cache, cacheLength, ++idx);
+
+                //  处理缓存中的一行
+                int i = 14;
+                methodIdx = i;
+                while (cache[i] != 44) {
+                    ++i;
+                }
+                methodIdx = (i - methodIdx - 5) * 10 + (cache[i - 1] - 48);
+
+                ++i;
+                elpasedTime = 0;
+                while (cache[i] != 10) {
+                    elpasedTime = elpasedTime * 10 + cache[i++] - 48;
+                }
+
+                array[methodIdx][size[methodIdx]++] = elpasedTime;
+                arraySum[methodIdx] += elpasedTime;
+                flag[methodIdx] = true;
+
+                //  将 buffer 中多余部分写入 cache
+                int end = bufferLength - 1;
+                while (buffer[end] != 10) {
+                    --end;
+                }
+                cacheLength = bufferLength - ++end;
+                System.arraycopy(buffer, end, cache, 0, cacheLength);
+
+                //  处理 buffer 中剩余部分
+                while (idx < end) {
+                    if (currentByte != buffer[idx + 9]) {
+                        StringBuilder builder = new StringBuilder(20);
+                        for (int j = 0; j < METHOD_MAX; ++j) {
+                            if (!flag[j])
+                                continue;
+
+                            int qps = size[j], sum = arraySum[j];
+                            int[] arr = Arrays.copyOf(array[j], qps);
+                            Arrays.sort(arr);
+
+                            int avg = sum / qps;
+                            if (avg * qps != sum) {
+                                ++avg;
+                            }
+
+                            builder.setLength(0);
+                            builder.append(qps).append(',').append(arr[getIndex(qps, 0.99)]).append(',').append(arr[getIndex(qps, 0.5)]).append(',').append(avg).append(',').append(arr[qps - 1]);
+                            res[stamp][j] = builder.toString();
+                            arraySum[j] = 0;
+                            size[j] = 0;
+                            flag[j] = false;
+                        }
+                        ++stamp;
+                        currentByte = buffer[idx + 9];
+                    }
+
+                    idx += 14;
+                    methodIdx = idx;
+                    while (buffer[idx] != 44) {
+                        ++idx;
+                    }
+                    methodIdx = (idx - methodIdx - 5) * 10 + (buffer[idx - 1] - 48);
+
+                    ++idx;
+                    elpasedTime = 0;
+                    while (buffer[idx] != 10) {
+                        elpasedTime = elpasedTime * 10 + buffer[idx++] - 48;
+                    }
+
+                    array[methodIdx][size[methodIdx]++] = elpasedTime;
+                    arraySum[methodIdx] += elpasedTime;
+                    flag[methodIdx] = true;
+                    ++idx;
+                }
+            }
+
+        } catch (
+                IOException e) {
             e.printStackTrace();
         }
-
     }
 
 
@@ -131,7 +196,6 @@ public class KcodeQuestion {
      * @return QPS, P99, P50, AVG, MAX
      */
     public String getResult(Long timestamp, String methodName) {
-        return res[timestamp.intValue() - minStamp][methodMap.get(methodName)];
+        return res[timestamp.intValue() - minStamp][(methodName.length() - 5) * 10 + (methodName.charAt(methodName.length() - 1) - 48)];
     }
 }
-
