@@ -15,9 +15,9 @@ KCode 快手程序设计大赛
 1. **use arrays** to store data instead of Map, ArrayList and so on
 2. method names can be stored using the following method, so all method names can be mapped to a number between 0 and 99
 
-> $methodIdx = (length * 10 - minLength) + (lastChar - '0')$
+> $methodIdx = (length - minLength) * 10 + (lastChar - 48)$
 >
-> $minLength$ is 5 and $lastChar$ represents the last character
+> ( $minLength$ is 5 and $lastChar$ represents the last character )
 
 ## License
 
