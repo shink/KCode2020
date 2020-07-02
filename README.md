@@ -16,7 +16,7 @@
 
 4. `read(buffer)` 比 `readLine()` 快很多，`str.split()` 超级慢
 
-5. 在循环次数比较大的循环体中，尽量避免多余的 if-else，并且 if() 中的判断尽量使用较小字节的数据类型，`if(boolean)` 会比 `if(int >= int)` 稍快一点
+5. 在循环次数比较大的循环体中，尽量避免多余的 `if-else`，并且 `if()` 中的判断尽量使用较小字节的数据类型，`if(boolean)` 会比 `if(int >= int)` 稍快一点
 
 6. 设计一种映射策略代替 `Map<String, Integer>`
 
