@@ -11,7 +11,6 @@ sleep_time=$((RANDOM % 20 + 50))m
 message="auto commit by aliyun"
 
 cd $current_path
-git pull
 rm -rf $path$file
 cp ../$target_file $path$file
 
@@ -20,6 +19,6 @@ do
 echo >> $path$file
 git add -A
 git commit -m "${message}"
-git push
+git push -u origin master -f
 sleep $sleep_time
 done
