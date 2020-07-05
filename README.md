@@ -1,5 +1,9 @@
 # KCode2020
 
+## Team
+
+XDU
+
 ## Score
 
 - warm-up : 1170541 (rank 10, 单线程)

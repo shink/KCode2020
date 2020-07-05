@@ -1,15 +1,12 @@
 package com.kuaishou.kcode;
 
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
-import static java.lang.System.nanoTime;
-import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 
 /**
@@ -22,17 +19,16 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
 
     private static final int SERVICE_MAX = 81;
-    private static final int IP_MAX = 451;
     private static final int IP_INDEX_MAX = 10;
     private static final int ELAPSE_MAX = 299;
     private static final int TIME_MAX = 30;
 
-    //    private static final int TIME_MIN = 33;     // 线下
-    //    private static final int STAMP_MIN = 299980;    //  线下
-    //    private static final int STAMP_LEN = 6;     // 线下
-    private static final int TIME_MIN = 6;     // 线上
-    private static final int STAMP_MIN = 360;    //  线上
-    private static final int STAMP_LEN = 4;     //    线上
+    private static final int TIME_MIN = 33;     // 线下
+    private static final int STAMP_MIN = 299980;    //  线下
+    private static final int STAMP_LEN = 6;     // 线下
+    //    private static final int TIME_MIN = 6;     // 线上
+    //    private static final int STAMP_MIN = 360;    //  线上
+    //    private static final int STAMP_LEN = 4;     //    线上
 
     private static final int BUFFER_SIZE = 1 << 18;
     private static final int CACHE_SIZE = 1 << 7;
@@ -41,18 +37,6 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
     private int[][] serviceHash;
     private List<String>[][][] checkPairRes;
     private String[][][] checkResponderRes;
-
-
-    static class TestException extends Exception {
-        public TestException(String message) {
-            super(message);
-        }
-    }
-
-
-    public void test(String msg) throws TestException {
-        throw new TestException(msg);
-    }
 
 
     /**
@@ -71,17 +55,17 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
      */
     private int getTimeIdx(String time) {
         //  线下
-        //        if (time.charAt(9) != 54 || (time.charAt(12) != 55 && time.charAt(12) != 56))
-        //            return -1;
-        //
-        //        int timeIdx = (time.charAt(14) - (time.charAt(12) == 55 ? 48 : 42)) * 10;
-        //        timeIdx += (time.charAt(15) - 48 - TIME_MIN);
-
-        //  线上
-        if (time.charAt(9) != 53 || time.charAt(11) != 49 || time.charAt(12) != 49)
+        if (time.charAt(9) != 54 || (time.charAt(12) != 55 && time.charAt(12) != 56))
             return -1;
 
-        int timeIdx = (time.charAt(14) - 48) * 10 + (time.charAt(15) - 48) - TIME_MIN;
+        int timeIdx = (time.charAt(14) - (time.charAt(12) == 55 ? 48 : 42)) * 10;
+        timeIdx += (time.charAt(15) - 48 - TIME_MIN);
+
+        //  线上
+        //        if (time.charAt(9) != 53 || time.charAt(11) != 49 || time.charAt(12) != 49)
+        //            return -1;
+        //
+        //        int timeIdx = (time.charAt(14) - 48) * 10 + (time.charAt(15) - 48) - TIME_MIN;
 
         return (timeIdx >= 0 && timeIdx < TIME_MAX) ? timeIdx : -1;
     }
@@ -104,7 +88,12 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
                 break;
         }
 
-        return serviceHash[idx1][idx2];
+        if (serviceHash[idx1][idx2] == 0) {
+            serviceHash[idx1][idx2] = serviceCount;
+            return serviceCount++;
+        } else {
+            return serviceHash[idx1][idx2];
+        }
     }
 
 
@@ -113,12 +102,7 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
      *
      * @param path, 需要分析文件的路径（绝对路径），由评测系统输入
      */
-    public void prepare(String path) throws IOException {
-        RandomAccessFile raf = new RandomAccessFile(path, "r");
-        long fileSize = raf.length();
-
-        long startNs = nanoTime();
-
+    public void prepare(String path) throws FileNotFoundException {
         String[] rate = new String[10001];
         int idx = 0;
         byte[] bytes = new byte[]{48, 48, 46, 48, 48, 37};
@@ -145,10 +129,8 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
         byte[] buffer = new byte[BUFFER_SIZE + CACHE_SIZE];
         int readLength, cacheLength = 0;
 
-        short ipCount = 1;
         short[][][] ipHash = new short[255][255][255];
-        short[][] ipIdxHash = new short[SERVICE_MAX][IP_MAX];
-        short[] ipSum = new short[SERVICE_MAX];
+        short[] ipCount = new short[SERVICE_MAX];
         String[][] ip = new String[SERVICE_MAX][IP_INDEX_MAX];
 
         short[][][][][] pairData = new short[SERVICE_MAX][SERVICE_MAX][IP_INDEX_MAX][IP_INDEX_MAX][ELAPSE_MAX];
@@ -156,7 +138,7 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
         int[][] responderData = new int[TIME_MAX][SERVICE_MAX];
 
         int callerIdx, responderIdx, timeIdx = 0, curTimeIdx = 0;
-        short callerIpIdx, responderIpIdx, callerIpHashIdx, responderIpHashIdx;
+        short callerIpIdx, responderIpIdx;
         int stamp, elapsedTime;
         int qps, trueQps, rateIdx, p99Idx, p99, records, trueRecords;
         boolean isSuccess;
@@ -211,17 +193,13 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
                         idx5 = idx5 * 10 + (buffer[index++] - 48);
                     }
                     if (ipHash[idx3][idx4][idx5] == 0) {
-                        ipHash[idx3][idx4][idx5] = ipCount++;
-                    }
-                    callerIpHashIdx = ipHash[idx3][idx4][idx5];
-                    if (ipIdxHash[callerIdx][callerIpHashIdx] == 0) {
-                        callerIpIdx = ++ipSum[callerIdx];
-                        ipIdxHash[callerIdx][callerIpHashIdx] = callerIpIdx;
+                        callerIpIdx = ++ipCount[callerIdx];
+                        ipHash[idx3][idx4][idx5] = callerIpIdx;
                         builder.setLength(0);
                         builder.append("10.").append(idx3).append(".").append(idx4).append(".").append(idx5);
                         ip[callerIdx][callerIpIdx] = builder.toString();
                     } else {
-                        callerIpIdx = ipIdxHash[callerIdx][callerIpHashIdx];
+                        callerIpIdx = ipHash[idx3][idx4][idx5];
                     }
 
                     //  计算 responderIdx
@@ -262,17 +240,13 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
                         idx5 = idx5 * 10 + (buffer[index++] - 48);
                     }
                     if (ipHash[idx3][idx4][idx5] == 0) {
-                        ipHash[idx3][idx4][idx5] = ipCount++;
-                    }
-                    responderIpHashIdx = ipHash[idx3][idx4][idx5];
-                    if (ipIdxHash[responderIdx][responderIpHashIdx] == 0) {
-                        responderIpIdx = ++ipSum[responderIdx];
-                        ipIdxHash[responderIdx][responderIpHashIdx] = responderIpIdx;
+                        responderIpIdx = ++ipCount[responderIdx];
+                        ipHash[idx3][idx4][idx5] = responderIpIdx;
                         builder.setLength(0);
                         builder.append("10.").append(idx3).append(".").append(idx4).append(".").append(idx5);
                         ip[responderIdx][responderIpIdx] = builder.toString();
                     } else {
-                        responderIpIdx = ipIdxHash[responderIdx][responderIpHashIdx];
+                        responderIpIdx = ipHash[idx3][idx4][idx5];
                     }
 
                     //  是否调用成功
@@ -296,10 +270,10 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
 
                     //  处理
                     if (timeIdx != curTimeIdx) {
-                        for (int i = 1; i < serviceCount; ++i) {
+                        for (int i = 1; i < SERVICE_MAX; ++i) {
                             records = 0;
                             trueRecords = 0;
-                            for (int j = 1; j < serviceCount; ++j) {
+                            for (int j = 1; j < SERVICE_MAX; ++j) {
                                 List<String> resList = new ArrayList<>();
 
                                 for (int k = 1; k < IP_INDEX_MAX; ++k) {
@@ -398,9 +372,7 @@ public class KcodeRpcMonitorImpl implements KcodeRpcMonitor {
                 }
             }
 
-            test(fileSize + ", prepare : " + NANOSECONDS.toMillis(nanoTime() - startNs) + "ms");
-
-        } catch (IOException | TestException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
