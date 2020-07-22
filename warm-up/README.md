@@ -16,4 +16,4 @@
 
 2. methodName 共有 69 个，观察发现仅需要 `methodName.length()` 和最后一位数字即可唯一确定，最终可以将 String 类型的 methodName 表示为一个 [0, 99] 的 int 值 (实际只需要 `[0, 81]`)
 
-3. 方法耗时区间范围较大，不适合 Bucket sort
+3. 方法耗时区间范围较大，不适合通过数组下标做 Bucket sort
