@@ -12,6 +12,8 @@ XDU
 
 - semifinal : 7536.00 (rank 20, 单线程)
 
+- final : rank 19
+
 ## Tricks
 
 1. 尽量使用数组
